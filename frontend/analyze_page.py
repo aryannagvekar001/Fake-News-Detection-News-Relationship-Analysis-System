@@ -206,29 +206,132 @@ class AnalyzePage(ctk.CTkFrame):
         self._right_scroll = right_scroll
 
     def _load_demo(self, demo_type: str):
-        """Load a demo article into the form fields."""
-        demos = {
-            "real": {
+        """Load a random demo article of the given type into the form fields."""
+        import random
+
+        # ── Pool of REAL news examples ────────────────────────────
+        real_demos = [
+            {
                 "headline": "Scientists confirm climate change accelerating faster than predicted",
                 "content": "A comprehensive new study published in Nature Climate Journal has found that global temperatures are rising at a rate significantly faster than models predicted just five years ago. Researchers from 15 countries analyzed over 50 years of temperature data. The study found that ocean temperatures have increased by 0.4 degrees Celsius over the past decade, contributing to more frequent extreme weather events. The lead researcher Dr. Sarah Chen emphasized that immediate action on carbon emissions is critical to preventing irreversible damage to ecosystems.",
                 "source": "Science Daily",
-                "date": "2024-01-15"
+                "date": "2024-01-15",
             },
-            "fake": {
+            {
+                "headline": "Parliament passes new data privacy law affecting major tech companies",
+                "content": "The national parliament voted 312 to 88 in favor of a sweeping new data privacy legislation that will require technology companies to obtain explicit user consent before collecting personal data. The law, which takes effect in six months, also mandates that companies disclose data breaches within 72 hours and allow users to request deletion of their information. Major technology firms including social media platforms and search engines will be required to appoint data protection officers and conduct annual audits. Violations could result in fines of up to 4 percent of global annual revenue.",
+                "source": "The National Tribune",
+                "date": "2024-02-10",
+            },
+            {
+                "headline": "New study finds regular exercise reduces heart disease risk by 30 percent",
+                "content": "Researchers at the University Medical Center have published findings from a decade-long study involving over 40,000 participants that shows regular moderate exercise reduces the risk of cardiovascular disease by approximately 30 percent. The study, published in the Journal of Cardiology, found that as little as 150 minutes of brisk walking per week was sufficient to achieve significant health benefits. Lead author Dr. James Morrison noted that the results were consistent across age groups and both sexes. Health authorities have updated their guidelines based on the findings.",
+                "source": "Health Today",
+                "date": "2024-03-05",
+            },
+            {
+                "headline": "Renewable energy surpasses coal in national electricity generation for first time",
+                "content": "For the first time in the country's history, renewable energy sources including solar, wind, and hydroelectric power contributed more to the national electricity grid than coal-fired power stations last quarter. Government data released by the energy ministry shows that renewables accounted for 34.2 percent of total generation compared to coal's 31.7 percent. Solar power alone grew 47 percent year over year driven by subsidies and falling installation costs. Energy analysts say the trend is expected to accelerate as several new offshore wind farms come online next year.",
+                "source": "Energy Monitor",
+                "date": "2024-04-18",
+            },
+            {
+                "headline": "Central bank raises interest rates by 0.25 percent to combat inflation",
+                "content": "The central bank's monetary policy committee voted unanimously to raise the benchmark interest rate by 25 basis points to 5.25 percent, citing persistent inflation pressures that remain above the 2 percent target. The governor stated in a press conference that the decision reflects the committee's commitment to restoring price stability while acknowledging risks to economic growth. Economists had widely anticipated the move following last month's consumer price index data which showed inflation at 3.8 percent. The next policy review is scheduled for March.",
+                "source": "Financial Review",
+                "date": "2024-01-28",
+            },
+            {
+                "headline": "University develops new antibiotic effective against drug-resistant bacteria",
+                "content": "Microbiologists at the Institute of Infectious Diseases have synthesized a new class of antibiotic that shows effectiveness against several strains of drug-resistant bacteria in laboratory tests. The compound, tentatively called Novacillin, works by disrupting bacterial cell wall synthesis through a novel mechanism distinct from existing antibiotics, making cross-resistance unlikely. Animal trials have shown a favorable safety profile. The research team plans to begin Phase I human clinical trials within 18 months pending regulatory approval. The findings were published in the peer-reviewed journal Nature Medicine.",
+                "source": "Medical Research News",
+                "date": "2024-05-07",
+            },
+            {
+                "headline": "Unemployment rate falls to 20-year low as job market strengthens",
+                "content": "The national unemployment rate dropped to 3.4 percent last month, its lowest level since 2004, as employers added 285,000 jobs according to official labor department figures. The manufacturing and healthcare sectors led job creation, contributing 95,000 and 78,000 positions respectively. Wage growth also remained solid at 4.1 percent year over year, outpacing inflation for the third consecutive month. Economists noted that the tight labor market is putting upward pressure on wages but may also complicate the central bank's efforts to bring inflation fully back to target.",
+                "source": "Economics Daily",
+                "date": "2024-02-02",
+            },
+            {
+                "headline": "City council approves billion-dollar public transit expansion plan",
+                "content": "The city council approved a 1.2 billion dollar plan to expand the metropolitan transit system, adding 34 new stations and extending two existing subway lines into underserved suburban areas. The project is expected to take seven years to complete and will be funded through a combination of federal grants, municipal bonds, and a small increase in local sales tax. Supporters say the expansion will reduce traffic congestion by an estimated 18 percent and cut commute times for approximately 400,000 residents. Construction is scheduled to begin early next year following an environmental impact review.",
+                "source": "City Tribune",
+                "date": "2024-03-21",
+            },
+        ]
+
+        # ── Pool of FAKE news examples ────────────────────────────
+        fake_demos = [
+            {
                 "headline": "SHOCKING: Government secretly adding mind control chemicals to tap water",
                 "content": "EXCLUSIVE REPORT: Multiple insider sources have confirmed that the government has been secretly adding mind control chemicals to the public water supply for the past 20 years. The chemicals, developed by a shadowy organization of billionaires, are designed to make citizens more obedient and less likely to question authority. A brave whistleblower has come forward with documents proving this conspiracy. The mainstream media is trying to suppress this information. Share this article before it gets deleted! The deep state cannot hide the truth much longer. Wake up people!",
                 "source": "TruthBombs247",
-                "date": "2024-01-15"
+                "date": "2024-01-15",
             },
-            "duplicate": {
+            {
+                "headline": "DOCTORS CONFIRM: Eating chocolate every day cures all types of cancer",
+                "content": "BREAKING: A group of alternative medicine doctors have confirmed what Big Pharma doesn't want you to know — dark chocolate contains a miracle compound that eliminates cancer cells in just 30 days. Pharmaceutical companies are furiously lobbying governments to ban this information because it would destroy their trillion-dollar cancer treatment industry. One patient reportedly cured stage-4 cancer by eating six bars of chocolate daily. The study, conducted by the Institute of Natural Health (which cannot be found in any public database), claims a 99.9 percent cure rate. Forward this to everyone you know!",
+                "source": "NaturalHealthSecrets.net",
+                "date": "2024-02-14",
+            },
+            {
+                "headline": "5G towers CONFIRMED to spread disease and permanently weaken immune system",
+                "content": "Scientists working secretly for a whistleblower organization have confirmed what many have suspected for years: 5G telecommunications towers emit frequencies that weaken the human immune system and have been deliberately engineered to spread disease. The technology, developed with involvement from shadowy globalist organizations, targets specific DNA sequences. Governments around the world are rolling out 5G towers near schools and hospitals. Multiple countries are allegedly planning to use the network to release engineered pathogens into densely populated areas. Destroy the nearest 5G tower to protect your community!",
+                "source": "FreedomSignal.org",
+                "date": "2024-03-03",
+            },
+            {
+                "headline": "Leaked documents PROVE moon landing was faked in Hollywood studio",
+                "content": "Classified documents recently obtained by an anonymous hacker collective prove beyond all doubt that the 1969 Apollo moon landing was staged in a secret Hollywood studio directed by Stanley Kubrick. The documents, which NASA is desperately trying to have removed from the internet, show payment records to film crew and orders for lunar props. Space experts pointing out that radiation beyond Earth orbit would have killed the astronauts are being systematically silenced. Thousands of engineers and scientists involved in the cover-up have been sworn to secrecy under threat. The truth cannot be hidden any longer.",
+                "source": "ConspiracyTruthNetwork",
+                "date": "2024-01-20",
+            },
+            {
+                "headline": "URGENT: New law will allow government to seize all private homes next month",
+                "content": "ALERT: A secretly passed amendment buried in thousands of pages of legislation will allow government agents to seize any private property without compensation or notice starting next month. The amendment was inserted at 3 AM during a procedural vote and no mainstream journalist has reported on it. Once in effect, government officials will be able to enter your home, take your possessions, and force you to relocate to designated housing zones. Legal experts who tried to raise the alarm were immediately fired or discredited. Share this warning immediately before the government censors it.",
+                "source": "PatriotAlertDaily",
+                "date": "2024-04-01",
+            },
+            {
+                "headline": "Billionaires have discovered the secret to immortality and are hiding it",
+                "content": "An anonymous insider from a secretive Silicon Valley longevity research lab has revealed that several of the world's richest people have already extended their lifespans to 200+ years using a classified gene therapy treatment. The treatment, derived from a rare deep-sea organism, reverses cellular aging completely. The billionaires are hoarding this technology and will only share it among themselves and their chosen associates when global population reaches their target reduction level. They plan to reveal this technology publicly only after controlling who has access to it. The whistleblower risked their life to bring you this information.",
+                "source": "GlobalWatchdog.io",
+                "date": "2024-05-15",
+            },
+            {
+                "headline": "Scientists finally ADMIT evolution theory was completely fabricated",
+                "content": "In a stunning reversal, a group of senior scientists have publicly admitted that the theory of evolution was fabricated in the 19th century as part of a coordinated effort to undermine religious faith and consolidate control over educational institutions. Fossil evidence cited in evolutionary biology textbooks has been confirmed as fraudulent, with bones carved from stone and planted at dig sites. DNA evidence that supposedly supports common ancestry was manufactured using flawed statistical models. The real history of life on Earth has been deliberately concealed. Educational authorities worldwide are expected to revise school curricula within the year.",
+                "source": "TruthInScience.net",
+                "date": "2024-02-28",
+            },
+        ]
+
+        # ── Pool of DUPLICATE examples ────────────────────────────
+        duplicate_demos = [
+            {
                 "headline": "Scientists confirm climate change accelerating faster than predicted",
                 "content": "A comprehensive new study published in Nature Climate Journal has found that global temperatures are rising at a rate significantly faster than models predicted just five years ago. Researchers from 15 countries analyzed over 50 years of temperature data. The study found that ocean temperatures have increased by 0.4 degrees Celsius over the past decade, contributing to more frequent extreme weather events. The lead researcher Dr. Sarah Chen emphasized that immediate action on carbon emissions is critical to preventing irreversible damage to ecosystems.",
                 "source": "News Mirror",
-                "date": "2024-01-16"
-            }
-        }
+                "date": "2024-01-16",
+            },
+            {
+                "headline": "Parliament passes data privacy legislation targeting technology firms",
+                "content": "The national parliament voted 312 to 88 in favor of sweeping new data privacy legislation that will require technology companies to obtain explicit user consent before collecting personal data. The law also mandates disclosure of data breaches within 72 hours and gives users the right to request deletion of their personal information. Violations may result in fines of up to 4 percent of global annual revenue for non-compliant companies.",
+                "source": "Daily Echo",
+                "date": "2024-02-11",
+            },
+            {
+                "headline": "New study links regular exercise to significantly lower heart disease risk",
+                "content": "Researchers at the University Medical Center have published findings showing regular moderate exercise reduces cardiovascular disease risk by approximately 30 percent. The decade-long study of over 40,000 participants found that just 150 minutes of brisk walking per week produced significant health benefits across all age groups. The results have prompted health authorities to update their official exercise guidelines.",
+                "source": "Wellness Weekly",
+                "date": "2024-03-06",
+            },
+        ]
 
-        demo = demos.get(demo_type, {})
+        pool = {"real": real_demos, "fake": fake_demos, "duplicate": duplicate_demos}
+        demo = random.choice(pool.get(demo_type, real_demos))
+
         self._headline_var.set(demo.get("headline", ""))
         self._content_text.delete("1.0", "end")
         self._content_text.insert("1.0", demo.get("content", ""))

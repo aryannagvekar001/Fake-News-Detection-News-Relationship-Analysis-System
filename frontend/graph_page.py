@@ -1,12 +1,16 @@
 """
 frontend/graph_page.py
-News Graph visualization page.
-Shows the NetworkX graph of article relationships using matplotlib.
+News Graph visualization page — simplified and beginner-friendly.
+
+Redesigned to be instantly understandable:
+- Big legend with plain-English explanations
+- Node cards listed below the graph for easy reading
+- Simple stats in plain language
+- "How it works" explainer panel
 """
 
 import tkinter as tk
 import customtkinter as ctk
-import threading
 from frontend.components import COLORS, FONTS, show_toast
 from backend.graph_manager import get_graph_manager
 from backend.graph_algorithms import (
@@ -18,15 +22,12 @@ from utils.helpers import truncate_text, prediction_color
 
 class GraphPage(ctk.CTkFrame):
     """
-    Interactive news relationship graph page.
+    News article relationship graph page — redesigned for clarity.
 
-    Features:
-    - Matplotlib-based graph visualization
-    - Node color coding by prediction (green=real, red=fake, yellow=suspicious)
-    - BFS/DFS traversal controls
-    - Connected components display
-    - Article search within graph
-    - Selected node details
+    Layout:
+    - Top: plain-English "How it works" banner
+    - Left: graph canvas with big clear legend
+    - Right: easy-to-read stats, article list, cluster summary
     """
 
     def __init__(self, parent, **kwargs):
@@ -35,201 +36,199 @@ class GraphPage(ctk.CTkFrame):
         self._build_ui()
 
     def _build_ui(self):
-        # Top toolbar
-        toolbar = ctk.CTkFrame(self, fg_color=COLORS["bg_secondary"], height=60)
-        toolbar.pack(fill="x", padx=0, pady=(0, 0))
+        # ── Top toolbar ───────────────────────────────────────────
+        toolbar = ctk.CTkFrame(self, fg_color=COLORS["bg_secondary"], height=56)
+        toolbar.pack(fill="x")
         toolbar.pack_propagate(False)
 
-        toolbar_inner = ctk.CTkFrame(toolbar, fg_color="transparent")
-        toolbar_inner.pack(side="left", padx=20, pady=10, fill="x", expand=True)
-
-        ctk.CTkLabel(toolbar_inner, text="🕸️  News Relationship Graph",
+        ctk.CTkLabel(toolbar, text="🕸️  News Relationship Graph",
                      font=FONTS["heading"],
-                     text_color=COLORS["text_primary"]).pack(side="left")
+                     text_color=COLORS["text_primary"]).pack(side="left", padx=20, pady=14)
 
-        ctk.CTkButton(toolbar, text="🔄 Refresh Graph",
+        ctk.CTkButton(toolbar, text="🔄 Refresh",
                       font=FONTS["small"],
                       fg_color=COLORS["accent_purple"],
                       hover_color="#6d28d9",
                       height=32,
-                      width=140,
-                      command=self.refresh).pack(side="right", padx=16, pady=14)
+                      width=110,
+                      command=self.refresh).pack(side="right", padx=16, pady=12)
 
-        # Main content: graph canvas + right sidebar
+        # ── "How it works" banner ─────────────────────────────────
+        how_frame = ctk.CTkFrame(self, fg_color="#0f2d40", corner_radius=0)
+        how_frame.pack(fill="x", padx=0, pady=0)
+
+        how_inner = ctk.CTkFrame(how_frame, fg_color="transparent")
+        how_inner.pack(fill="x", padx=20, pady=10)
+
+        ctk.CTkLabel(how_inner,
+                     text="💡 What is this graph?  Each circle (●) = one news article.  "
+                          "Lines between circles = articles that are related.  "
+                          "Green = Likely Real  ·  Red = Likely Fake  ·  Yellow = Suspicious",
+                     font=FONTS["small"],
+                     text_color="#7dd3fc",
+                     wraplength=1200,
+                     justify="left").pack(anchor="w")
+
+        # ── Main split: canvas + sidebar ─────────────────────────
         main = ctk.CTkFrame(self, fg_color="transparent")
         main.pack(fill="both", expand=True)
         main.columnconfigure(0, weight=3)
         main.columnconfigure(1, weight=1)
         main.rowconfigure(0, weight=1)
 
-        # ── Graph Canvas ──────────────────────────────────────────
+        # ── Left: Graph canvas ────────────────────────────────────
         self._canvas_frame = ctk.CTkFrame(main, fg_color=COLORS["bg_card"],
-                                           corner_radius=0)
-        self._canvas_frame.grid(row=0, column=0, sticky="nsew", padx=(12, 6),
-                                 pady=12)
+                                          corner_radius=0)
+        self._canvas_frame.grid(row=0, column=0, sticky="nsew",
+                                padx=(12, 6), pady=12)
 
         self._empty_label = ctk.CTkLabel(
             self._canvas_frame,
-            text="🕸️\n\nNo graph data yet.\n\nAnalyze some articles first,\nthen refresh this page.",
+            text="🕸️\n\nNo articles analyzed yet.\n\nGo to 'Analyze News', analyze a few articles,\nthen come back and click Refresh.",
             font=FONTS["body"],
             text_color=COLORS["text_muted"],
             justify="center"
         )
         self._empty_label.pack(expand=True)
 
-        # ── Right Sidebar ─────────────────────────────────────────
+        # ── Right: Sidebar ─────────────────────────────────────────
         sidebar = ctk.CTkScrollableFrame(main, fg_color=COLORS["bg_secondary"],
-                                          width=280)
+                                         width=290)
         sidebar.grid(row=0, column=1, sticky="nsew", padx=(6, 12), pady=12)
 
-        # Graph stats
-        ctk.CTkLabel(sidebar, text="📊 Graph Statistics",
+        # ── SECTION 1: Simple stats ───────────────────────────────
+        stats_card = ctk.CTkFrame(sidebar, fg_color=COLORS["bg_card"], corner_radius=10)
+        stats_card.pack(fill="x", padx=8, pady=(12, 8))
+
+        ctk.CTkLabel(stats_card, text="📊 Graph at a Glance",
                      font=FONTS["subheading"],
-                     text_color=COLORS["text_secondary"]).pack(anchor="w", padx=12, pady=(12, 8))
+                     text_color=COLORS["text_secondary"]).pack(anchor="w", padx=14, pady=(12, 6))
 
-        self._stats_frame = ctk.CTkFrame(sidebar, fg_color=COLORS["bg_card"],
-                                          corner_radius=8)
-        self._stats_frame.pack(fill="x", padx=8, pady=(0, 12))
-        self._stats_labels = {}
-        stat_keys = [("nodes", "Nodes"), ("edges", "Edges"),
-                     ("components", "Clusters"), ("density", "Density")]
-        for key, label in stat_keys:
-            row = ctk.CTkFrame(self._stats_frame, fg_color="transparent")
-            row.pack(fill="x", padx=12, pady=4)
-            ctk.CTkLabel(row, text=label + ":", font=FONTS["small"],
-                         text_color=COLORS["text_muted"], width=80, anchor="w").pack(side="left")
-            lbl = ctk.CTkLabel(row, text="0", font=FONTS["small"],
-                               text_color=COLORS["accent_cyan"])
-            lbl.pack(side="right")
-            self._stats_labels[key] = lbl
+        self._stat_labels = {}
+        stat_defs = [
+            ("articles", "Total Articles", "0", COLORS["accent_cyan"]),
+            ("connections", "Total Connections", "0", COLORS["accent_purple"]),
+            ("clusters", "News Clusters", "0", COLORS["warning"]),
+        ]
+        for key, label, val, color in stat_defs:
+            row = ctk.CTkFrame(stats_card, fg_color=COLORS["bg_secondary"], corner_radius=6)
+            row.pack(fill="x", padx=10, pady=3)
+            ctk.CTkLabel(row, text=label,
+                         font=FONTS["small"],
+                         text_color=COLORS["text_muted"],
+                         anchor="w").pack(side="left", padx=10, pady=8)
+            lbl = ctk.CTkLabel(row, text=val,
+                               font=FONTS["subheading"],
+                               text_color=color)
+            lbl.pack(side="right", padx=10)
+            self._stat_labels[key] = lbl
 
-        # Legend
-        ctk.CTkLabel(sidebar, text="🎨 Legend",
+        # ── SECTION 2: Legend ─────────────────────────────────────
+        legend_card = ctk.CTkFrame(sidebar, fg_color=COLORS["bg_card"], corner_radius=10)
+        legend_card.pack(fill="x", padx=8, pady=(0, 8))
+
+        ctk.CTkLabel(legend_card, text="🎨 What the Colors Mean",
                      font=FONTS["subheading"],
-                     text_color=COLORS["text_secondary"]).pack(anchor="w", padx=12, pady=(0, 8))
-        legend_frame = ctk.CTkFrame(sidebar, fg_color=COLORS["bg_card"], corner_radius=8)
-        legend_frame.pack(fill="x", padx=8, pady=(0, 12))
-        for pred, color, icon in [("REAL", COLORS["real"], "●"),
-                                   ("FAKE", COLORS["fake"], "●"),
-                                   ("SUSPICIOUS", COLORS["suspicious"], "●")]:
-            lr = ctk.CTkFrame(legend_frame, fg_color="transparent")
-            lr.pack(fill="x", padx=12, pady=3)
-            ctk.CTkLabel(lr, text=icon, font=FONTS["body"],
-                         text_color=color).pack(side="left")
-            ctk.CTkLabel(lr, text=f" {pred}", font=FONTS["small"],
-                         text_color=COLORS["text_secondary"]).pack(side="left")
+                     text_color=COLORS["text_secondary"]).pack(anchor="w", padx=14, pady=(12, 6))
 
-        # BFS/DFS Controls
-        ctk.CTkLabel(sidebar, text="🔁 Graph Traversal",
-                     font=FONTS["subheading"],
-                     text_color=COLORS["text_secondary"]).pack(anchor="w", padx=12, pady=(0, 8))
+        node_legend = [
+            (COLORS["real"],       "●", "REAL article",       "Model thinks it's genuine news"),
+            (COLORS["fake"],       "●", "FAKE article",       "Model thinks it's misinformation"),
+            (COLORS["suspicious"], "●", "SUSPICIOUS article", "Model is not sure either way"),
+        ]
+        for color, icon, title, desc in node_legend:
+            row = ctk.CTkFrame(legend_card, fg_color=COLORS["bg_secondary"], corner_radius=6)
+            row.pack(fill="x", padx=10, pady=3)
+            ctk.CTkLabel(row, text=icon, font=("Segoe UI", 16),
+                         text_color=color, width=28).pack(side="left", padx=(10, 4), pady=6)
+            inner = ctk.CTkFrame(row, fg_color="transparent")
+            inner.pack(side="left", fill="x", expand=True, pady=6)
+            ctk.CTkLabel(inner, text=title, font=FONTS["small"],
+                         text_color=COLORS["text_primary"], anchor="w").pack(anchor="w")
+            ctk.CTkLabel(inner, text=desc, font=FONTS["tiny"],
+                         text_color=COLORS["text_muted"], anchor="w").pack(anchor="w")
 
-        traversal_frame = ctk.CTkFrame(sidebar, fg_color=COLORS["bg_card"], corner_radius=8)
-        traversal_frame.pack(fill="x", padx=8, pady=(0, 12))
-
-        ctk.CTkLabel(traversal_frame, text="Select Start Article:",
+        # Line/edge legend
+        ctk.CTkLabel(legend_card, text="Line (connection) types:",
                      font=FONTS["small"],
-                     text_color=COLORS["text_muted"]).pack(anchor="w", padx=12, pady=(10, 4))
+                     text_color=COLORS["text_muted"]).pack(anchor="w", padx=14, pady=(8, 4))
 
-        self._article_var = tk.StringVar(value="Select an article...")
-        self._article_dropdown = ctk.CTkOptionMenu(
-            traversal_frame,
-            variable=self._article_var,
-            values=["No articles yet"],
-            font=FONTS["tiny"],
-            fg_color=COLORS["bg_input"],
-            button_color=COLORS["accent_purple"],
-            button_hover_color="#6d28d9",
-            width=240
-        )
-        self._article_dropdown.pack(padx=12, pady=(0, 8), fill="x")
+        edge_legend = [
+            ("#ef4444", "— DUPLICATE",      "Nearly identical article"),
+            ("#f59e0b", "— SIMILAR",        "Similar content"),
+            ("#06b6d4", "— SAME TOPIC",     "Same news topic"),
+            ("#8b5cf6", "— SAME SOURCE",    "Same publisher"),
+        ]
+        for color, line, desc in edge_legend:
+            row = ctk.CTkFrame(legend_card, fg_color="transparent")
+            row.pack(fill="x", padx=14, pady=1)
+            ctk.CTkLabel(row, text=line, font=FONTS["small"],
+                         text_color=color, width=90, anchor="w").pack(side="left")
+            ctk.CTkLabel(row, text=desc, font=FONTS["tiny"],
+                         text_color=COLORS["text_muted"], anchor="w").pack(side="left")
 
-        btn_row = ctk.CTkFrame(traversal_frame, fg_color="transparent")
-        btn_row.pack(fill="x", padx=12, pady=(0, 12))
+        ctk.CTkFrame(legend_card, fg_color="transparent", height=8).pack()
 
-        ctk.CTkButton(btn_row, text="BFS",
-                      font=FONTS["small"],
-                      fg_color=COLORS["accent_cyan"],
-                      hover_color="#0891b2",
-                      height=32,
-                      command=lambda: self._run_traversal("bfs")).pack(side="left", expand=True, padx=(0, 4))
-        ctk.CTkButton(btn_row, text="DFS",
-                      font=FONTS["small"],
-                      fg_color="#8b5cf6",
-                      hover_color="#7c3aed",
-                      height=32,
-                      command=lambda: self._run_traversal("dfs")).pack(side="left", expand=True, padx=(4, 0))
-
-        # Traversal output
-        self._traversal_output = ctk.CTkTextbox(
-            traversal_frame,
-            font=FONTS["mono_small"],
-            fg_color=COLORS["bg_input"],
-            text_color=COLORS["accent_cyan"],
-            height=120,
-            state="disabled"
-        )
-        self._traversal_output.pack(fill="x", padx=12, pady=(0, 12))
-
-        # Connected Components
-        ctk.CTkLabel(sidebar, text="🗂️ News Clusters",
+        # ── SECTION 3: Article List (easy to read) ────────────────
+        ctk.CTkLabel(sidebar, text="📰 Articles in Graph",
                      font=FONTS["subheading"],
-                     text_color=COLORS["text_secondary"]).pack(anchor="w", padx=12, pady=(0, 8))
+                     text_color=COLORS["text_secondary"]).pack(anchor="w", padx=12, pady=(4, 6))
+
+        self._articles_frame = ctk.CTkFrame(sidebar, fg_color=COLORS["bg_card"],
+                                            corner_radius=10)
+        self._articles_frame.pack(fill="x", padx=8, pady=(0, 8))
+        ctk.CTkLabel(self._articles_frame, text="No articles yet.",
+                     font=FONTS["tiny"],
+                     text_color=COLORS["text_muted"]).pack(padx=12, pady=12)
+
+        # ── SECTION 4: News Clusters ──────────────────────────────
+        ctk.CTkLabel(sidebar, text="🗂️ News Clusters (Groups)",
+                     font=FONTS["subheading"],
+                     text_color=COLORS["text_secondary"]).pack(anchor="w", padx=12, pady=(4, 6))
+
+        ctk.CTkLabel(sidebar,
+                     text="Articles that are connected to each other form a cluster. "
+                          "A large cluster of fake articles could indicate a coordinated misinformation campaign.",
+                     font=FONTS["tiny"],
+                     text_color=COLORS["text_muted"],
+                     wraplength=270,
+                     justify="left").pack(anchor="w", padx=12, pady=(0, 6))
 
         self._clusters_frame = ctk.CTkFrame(sidebar, fg_color=COLORS["bg_card"],
-                                             corner_radius=8)
+                                            corner_radius=10)
         self._clusters_frame.pack(fill="x", padx=8, pady=(0, 12))
         ctk.CTkLabel(self._clusters_frame, text="No clusters yet.",
                      font=FONTS["tiny"],
                      text_color=COLORS["text_muted"]).pack(padx=12, pady=12)
 
-        # Most Connected
-        ctk.CTkLabel(sidebar, text="⭐ Most Connected",
-                     font=FONTS["subheading"],
-                     text_color=COLORS["text_secondary"]).pack(anchor="w", padx=12, pady=(0, 8))
-
-        self._top_nodes_frame = ctk.CTkFrame(sidebar, fg_color=COLORS["bg_card"],
-                                              corner_radius=8)
-        self._top_nodes_frame.pack(fill="x", padx=8, pady=(0, 12))
-
     def refresh(self):
         """Refresh the graph from the database and redraw."""
         graph_manager = get_graph_manager()
+        graph = graph_manager.get_nx_graph()
         graph_stats = graph_manager.get_graph_stats()
 
-        # Update stats
-        self._stats_labels["nodes"].configure(text=str(graph_stats.get("nodes", 0)))
-        self._stats_labels["edges"].configure(text=str(graph_stats.get("edges", 0)))
-        self._stats_labels["components"].configure(text=str(graph_stats.get("components", 0)))
-        self._stats_labels["density"].configure(text=str(graph_stats.get("density", 0.0)))
-
-        # Update article dropdown
-        articles = database.get_all_articles()
-        if articles:
-            options = [f"{a['article_id']} — {truncate_text(a['headline'], 40)}" for a in articles]
-            self._article_dropdown.configure(values=options)
-            self._article_var.set(options[0])
-        else:
-            self._article_dropdown.configure(values=["No articles yet"])
+        # Update quick stats
+        self._stat_labels["articles"].configure(text=str(graph_stats.get("nodes", 0)))
+        self._stat_labels["connections"].configure(text=str(graph_stats.get("edges", 0)))
+        self._stat_labels["clusters"].configure(text=str(graph_stats.get("components", 0)))
 
         # Draw graph
-        self._draw_graph(graph_manager.get_nx_graph())
+        self._draw_graph(graph)
+
+        # Update article list
+        self._update_article_list()
 
         # Update clusters
-        self._update_clusters(graph_manager.get_nx_graph())
-
-        # Update top nodes
-        self._update_top_nodes(graph_manager.get_nx_graph())
+        self._update_clusters(graph)
 
     def _draw_graph(self, graph):
-        """Draw the NetworkX graph in the canvas frame."""
-        # Clear canvas
+        """Draw the NetworkX graph with a beginner-friendly visual style."""
         for widget in self._canvas_frame.winfo_children():
             widget.destroy()
 
         if graph.number_of_nodes() == 0:
             ctk.CTkLabel(self._canvas_frame,
-                         text="🕸️\n\nNo graph data yet.\nAnalyze articles first.",
+                         text="🕸️\n\nNo articles analyzed yet.\n\nGo to 'Analyze News', analyze a few articles,\nthen click 🔄 Refresh.",
                          font=FONTS["body"],
                          text_color=COLORS["text_muted"],
                          justify="center").pack(expand=True)
@@ -240,72 +239,121 @@ class GraphPage(ctk.CTkFrame):
             matplotlib.use("Agg")
             import matplotlib.pyplot as plt
             import matplotlib.patches as mpatches
+            import matplotlib.patheffects as pe
             import networkx as nx
             from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
-            fig, ax = plt.subplots(figsize=(9, 6))
-            fig.patch.set_facecolor("#0f0f1a")
-            ax.set_facecolor("#0f0f1a")
+            fig, ax = plt.subplots(figsize=(9, 6.5))
+            fig.patch.set_facecolor("#0d1117")
+            ax.set_facecolor("#0d1117")
 
-            # Layout
-            if graph.number_of_nodes() <= 20:
-                pos = nx.spring_layout(graph, k=2.5, iterations=60, seed=42)
+            n = graph.number_of_nodes()
+
+            # Layout — spring layout with good spacing
+            if n <= 3:
+                pos = nx.circular_layout(graph)
+            elif n <= 15:
+                pos = nx.spring_layout(graph, k=3.0, iterations=80, seed=42)
             else:
-                pos = nx.spring_layout(graph, k=1.5, iterations=30, seed=42)
+                pos = nx.spring_layout(graph, k=2.0, iterations=40, seed=42)
 
-            # Node colors
-            node_colors = [graph.nodes[n].get("color", "#6b7280") for n in graph.nodes()]
+            # Node colors and sizes
+            node_colors = []
+            node_sizes = []
+            for node in graph.nodes():
+                pred = graph.nodes[node].get("prediction", "UNKNOWN")
+                color_map = {
+                    "REAL": "#22c55e",
+                    "FAKE": "#ef4444",
+                    "SUSPICIOUS": "#f59e0b",
+                }
+                node_colors.append(color_map.get(pred, "#6b7280"))
+                degree = graph.degree(node)
+                node_sizes.append(max(400, 200 + degree * 120))
 
-            # Edge colors by type
-            edge_colors_map = {
-                "DUPLICATE": "#ef4444",
-                "SIMILAR_CONTENT": "#f59e0b",
-                "SAME_TOPIC": "#06b6d4",
-                "SAME_SOURCE": "#8b5cf6",
-                "RELATED_KEYWORDS": "#22c55e"
+            # Edge colors by relationship type
+            edge_color_map = {
+                "DUPLICATE":        "#ef4444",
+                "SIMILAR_CONTENT":  "#f59e0b",
+                "SAME_TOPIC":       "#06b6d4",
+                "SAME_SOURCE":      "#8b5cf6",
+                "RELATED_KEYWORDS": "#22c55e",
             }
-            edge_colors = [
-                edge_colors_map.get(graph[u][v].get("relationship_type", ""), "#4b5563")
-                for u, v in graph.edges()
-            ]
+            edge_colors = []
+            edge_widths = []
+            for u, v in graph.edges():
+                rel = graph[u][v].get("relationship_type", "")
+                edge_colors.append(edge_color_map.get(rel, "#4b5563"))
+                edge_widths.append(2.5 if rel == "DUPLICATE" else 1.5)
 
-            # Draw edges
-            nx.draw_networkx_edges(graph, pos, ax=ax, edge_color=edge_colors,
-                                   alpha=0.6, arrows=True, arrowsize=12,
-                                   connectionstyle="arc3,rad=0.1",
-                                   width=1.5)
+            # Draw edges first (behind nodes)
+            nx.draw_networkx_edges(
+                graph, pos, ax=ax,
+                edge_color=edge_colors,
+                width=edge_widths,
+                alpha=0.7,
+                arrows=True,
+                arrowsize=14,
+                connectionstyle="arc3,rad=0.1",
+                min_source_margin=20,
+                min_target_margin=20,
+            )
 
             # Draw nodes
-            nx.draw_networkx_nodes(graph, pos, ax=ax,
-                                   node_color=node_colors,
-                                   node_size=400, alpha=0.9)
+            nx.draw_networkx_nodes(
+                graph, pos, ax=ax,
+                node_color=node_colors,
+                node_size=node_sizes,
+                alpha=0.95,
+                linewidths=2,
+                edgecolors="#1e293b",
+            )
 
-            # Node labels (short IDs)
+            # Smart labels: show short article ID parts
             labels = {}
             for node in graph.nodes():
-                labels[node] = node.split("-")[1][:6] if "-" in node else node[:6]
-            nx.draw_networkx_labels(graph, pos, labels, ax=ax,
-                                    font_size=7, font_color="#f1f5f9",
-                                    font_weight="bold")
+                parts = node.split("-")
+                labels[node] = parts[1][:6] if len(parts) > 1 else node[:6]
 
-            ax.set_title("News Article Relationship Graph",
-                         color="#f1f5f9", fontsize=11, pad=12)
+            nx.draw_networkx_labels(
+                graph, pos, labels, ax=ax,
+                font_size=7,
+                font_color="white",
+                font_weight="bold",
+            )
+
+            # ── Clean title ────────────────────────────────────────
+            ax.set_title(
+                f"News Article Graph  ·  {graph.number_of_nodes()} Articles  ·  "
+                f"{graph.number_of_edges()} Connections",
+                color="#e2e8f0", fontsize=11, pad=10, fontweight="bold"
+            )
             ax.axis("off")
 
-            # Legend
+            # ── Legend inside chart ────────────────────────────────
             legend_patches = [
-                mpatches.Patch(color=COLORS["real"], label="REAL"),
-                mpatches.Patch(color=COLORS["fake"], label="FAKE"),
-                mpatches.Patch(color=COLORS["suspicious"], label="SUSPICIOUS"),
-                mpatches.Patch(color="#ef4444", label="DUPLICATE edge"),
-                mpatches.Patch(color="#f59e0b", label="SIMILAR edge"),
-                mpatches.Patch(color="#06b6d4", label="SAME TOPIC edge"),
+                mpatches.Patch(color="#22c55e", label="● REAL article"),
+                mpatches.Patch(color="#ef4444", label="● FAKE article"),
+                mpatches.Patch(color="#f59e0b", label="● SUSPICIOUS"),
+                mpatches.Patch(color="#ef4444", label="— Duplicate"),
+                mpatches.Patch(color="#f59e0b", label="— Similar content"),
+                mpatches.Patch(color="#06b6d4", label="— Same topic"),
+                mpatches.Patch(color="#8b5cf6", label="— Same source"),
             ]
-            ax.legend(handles=legend_patches, loc="upper left",
-                      facecolor="#1a1a2e", edgecolor="#1e293b",
-                      labelcolor="#94a3b8", fontsize=7)
+            leg = ax.legend(
+                handles=legend_patches,
+                loc="lower left",
+                facecolor="#1a1f2e",
+                edgecolor="#334155",
+                labelcolor="#cbd5e1",
+                fontsize=8,
+                framealpha=0.9,
+                title="Legend",
+                title_fontsize=8,
+            )
+            leg.get_title().set_color("#94a3b8")
 
-            plt.tight_layout()
+            plt.tight_layout(pad=0.5)
             canvas = FigureCanvasTkAgg(fig, master=self._canvas_frame)
             canvas.draw()
             canvas.get_tk_widget().pack(fill="both", expand=True)
@@ -313,60 +361,72 @@ class GraphPage(ctk.CTkFrame):
 
         except ImportError:
             ctk.CTkLabel(self._canvas_frame,
-                         text="Install matplotlib to see graph visualization.",
+                         text="Install matplotlib to see graph visualization.\n\npip install matplotlib",
                          font=FONTS["body"],
-                         text_color=COLORS["text_muted"]).pack(expand=True)
+                         text_color=COLORS["text_muted"],
+                         justify="center").pack(expand=True)
         except Exception as e:
             ctk.CTkLabel(self._canvas_frame,
-                         text=f"Graph error: {str(e)[:100]}",
+                         text=f"Graph display error:\n{str(e)[:120]}",
                          font=FONTS["tiny"],
-                         text_color=COLORS["text_muted"]).pack(expand=True)
+                         text_color=COLORS["text_muted"],
+                         justify="center").pack(expand=True)
 
-    def _run_traversal(self, algo: str):
-        """Run BFS or DFS from the selected article."""
-        selected = self._article_var.get()
-        if not selected or selected in ("Select an article...", "No articles yet"):
-            show_toast(self.winfo_toplevel(), "Please select an article first.",
-                       color=COLORS["warning"])
+    def _update_article_list(self):
+        """Show a simple, readable list of all articles in the graph."""
+        for widget in self._articles_frame.winfo_children():
+            widget.destroy()
+
+        articles = database.get_all_articles()
+        if not articles:
+            ctk.CTkLabel(self._articles_frame, text="No articles yet.",
+                         font=FONTS["tiny"],
+                         text_color=COLORS["text_muted"]).pack(padx=12, pady=12)
             return
 
-        article_id = selected.split(" — ")[0].strip()
-        graph = get_graph_manager().get_nx_graph()
+        graph_manager = get_graph_manager()
 
-        if algo == "bfs":
-            result = bfs(graph, article_id, max_depth=3)
-        else:
-            result = dfs(graph, article_id, max_nodes=30)
+        for article in articles[:20]:  # Show up to 20
+            pred = article.get("prediction", "UNKNOWN")
+            color = prediction_color(pred)
+            connections = len(graph_manager.get_neighbors(article.get("article_id", "")))
 
-        # Display result
-        self._traversal_output.configure(state="normal")
-        self._traversal_output.delete("1.0", "end")
+            row = ctk.CTkFrame(self._articles_frame,
+                               fg_color=COLORS["bg_secondary"], corner_radius=6)
+            row.pack(fill="x", padx=8, pady=3)
 
-        if result.get("error"):
-            self._traversal_output.insert("end", f"Error: {result['error']}")
-        else:
-            order = result.get("traversal_order", [])
-            algo_name = "BFS" if algo == "bfs" else "DFS"
-            self._traversal_output.insert("end", f"Algorithm: {algo_name}\n")
-            self._traversal_output.insert("end", f"Start: {article_id}\n")
-            self._traversal_output.insert("end", f"Visited: {result.get('visited_count', 0)} nodes\n\n")
-            self._traversal_output.insert("end", "Traversal Order:\n")
+            # Color stripe
+            stripe = ctk.CTkFrame(row, fg_color=color, width=4, corner_radius=2)
+            stripe.pack(side="left", fill="y")
 
-            for i, node in enumerate(order):
-                short_id = node.split("-")[1][:8] if "-" in node else node[:8]
-                arrow = " → " if i < len(order) - 1 else ""
-                if algo == "bfs" and "levels" in result:
-                    level = result["levels"].get(node, 0)
-                    self._traversal_output.insert("end", f"[L{level}] {short_id}{arrow}")
-                else:
-                    self._traversal_output.insert("end", f"{short_id}{arrow}")
-                if (i + 1) % 4 == 0:
-                    self._traversal_output.insert("end", "\n")
+            info = ctk.CTkFrame(row, fg_color="transparent")
+            info.pack(side="left", fill="x", expand=True, padx=8, pady=6)
 
-        self._traversal_output.configure(state="disabled")
+            ctk.CTkLabel(info,
+                         text=truncate_text(article.get("headline", "No headline"), 38),
+                         font=FONTS["tiny"],
+                         text_color=COLORS["text_primary"],
+                         anchor="w").pack(anchor="w")
+            ctk.CTkLabel(info,
+                         text=f"{connections} connection{'s' if connections != 1 else ''}  ·  {article.get('source', 'Unknown')}",
+                         font=FONTS["tiny"],
+                         text_color=COLORS["text_muted"],
+                         anchor="w").pack(anchor="w")
+
+            # Prediction badge
+            icons = {"REAL": "✅", "FAKE": "❌", "SUSPICIOUS": "⚠️"}
+            ctk.CTkLabel(row,
+                         text=icons.get(pred, "❓"),
+                         font=("Segoe UI Emoji", 13)).pack(side="right", padx=8)
+
+        if len(articles) > 20:
+            ctk.CTkLabel(self._articles_frame,
+                         text=f"... and {len(articles) - 20} more",
+                         font=FONTS["tiny"],
+                         text_color=COLORS["text_muted"]).pack(padx=12, pady=4)
 
     def _update_clusters(self, graph):
-        """Update the connected components / clusters display."""
+        """Update the news clusters panel with plain-English descriptions."""
         for widget in self._clusters_frame.winfo_children():
             widget.destroy()
 
@@ -379,41 +439,43 @@ class GraphPage(ctk.CTkFrame):
                          text_color=COLORS["text_muted"]).pack(padx=12, pady=12)
             return
 
-        for comp in components[:5]:  # Show top 5 clusters
-            row = ctk.CTkFrame(self._clusters_frame, fg_color=COLORS["bg_secondary"],
-                               corner_radius=6)
-            row.pack(fill="x", padx=8, pady=4)
+        for comp in components[:6]:
+            size = comp["size"]
+            real = comp["real_count"]
+            fake = comp["fake_count"]
+            susp = comp["suspicious_count"]
 
-            ctk.CTkLabel(row,
-                         text=f"Cluster {comp['id']}: {comp['size']} articles",
+            # Determine cluster character
+            if fake > real and fake > susp:
+                char_icon = "🚨"
+                char_text = "Mostly fake"
+                char_color = COLORS["fake"]
+            elif real > fake and real > susp:
+                char_icon = "✅"
+                char_text = "Mostly real"
+                char_color = COLORS["real"]
+            else:
+                char_icon = "⚠️"
+                char_text = "Mixed"
+                char_color = COLORS["suspicious"]
+
+            card = ctk.CTkFrame(self._clusters_frame,
+                                fg_color=COLORS["bg_secondary"], corner_radius=8)
+            card.pack(fill="x", padx=8, pady=4)
+
+            top_row = ctk.CTkFrame(card, fg_color="transparent")
+            top_row.pack(fill="x", padx=10, pady=(8, 2))
+
+            ctk.CTkLabel(top_row,
+                         text=f"{char_icon} Cluster {comp['id']}  ·  {size} article{'s' if size != 1 else ''}",
                          font=FONTS["small"],
-                         text_color=COLORS["text_primary"]).pack(anchor="w", padx=10, pady=(6, 2))
-            ctk.CTkLabel(row,
-                         text=f"✅ {comp['real_count']} Real  ❌ {comp['fake_count']} Fake  ⚠️ {comp['suspicious_count']} Suspicious",
+                         text_color=COLORS["text_primary"]).pack(side="left")
+            ctk.CTkLabel(top_row,
+                         text=char_text,
                          font=FONTS["tiny"],
-                         text_color=COLORS["text_muted"]).pack(anchor="w", padx=10, pady=(0, 6))
+                         text_color=char_color).pack(side="right")
 
-    def _update_top_nodes(self, graph):
-        """Update the most connected articles list."""
-        for widget in self._top_nodes_frame.winfo_children():
-            widget.destroy()
-
-        top = get_most_connected_articles(graph, top_n=5)
-        if not top:
-            ctk.CTkLabel(self._top_nodes_frame, text="No data yet.",
+            ctk.CTkLabel(card,
+                         text=f"  ✅ {real} Real   ❌ {fake} Fake   ⚠️ {susp} Suspicious",
                          font=FONTS["tiny"],
-                         text_color=COLORS["text_muted"]).pack(padx=12, pady=12)
-            return
-
-        for item in top:
-            row = ctk.CTkFrame(self._top_nodes_frame, fg_color=COLORS["bg_secondary"],
-                               corner_radius=6)
-            row.pack(fill="x", padx=8, pady=3)
-            ctk.CTkLabel(row,
-                         text=truncate_text(item.get("headline", ""), 35),
-                         font=FONTS["tiny"],
-                         text_color=COLORS["text_primary"]).pack(anchor="w", padx=10, pady=(6, 2))
-            ctk.CTkLabel(row,
-                         text=f"{item.get('degree', 0)} connections · {item.get('prediction', 'UNKNOWN')}",
-                         font=FONTS["tiny"],
-                         text_color=COLORS["text_muted"]).pack(anchor="w", padx=10, pady=(0, 6))
+                         text_color=COLORS["text_muted"]).pack(anchor="w", padx=10, pady=(0, 8))

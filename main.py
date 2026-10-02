@@ -88,7 +88,6 @@ class FakeNewsApp(ctk.CTk):
         ("🕸️", "News Graph", "graph"),
         ("📚", "History", "history"),
         ("📡", "Sources", "sources"),
-        ("🏗️", "DSA Analysis", "dsa"),
         ("⏱️", "Timeline", "timeline"),
         ("ℹ️", "About", "about"),
     ]
@@ -177,7 +176,7 @@ class FakeNewsApp(ctk.CTk):
 
         # Bottom: version info
         ctk.CTkFrame(sidebar, fg_color=COLORS["border"], height=1).pack(fill="x", pady=(0, 8))
-        ctk.CTkLabel(sidebar, text="DSA Project — Unit IV\nGraph & Hashing",
+        ctk.CTkLabel(sidebar, text="Fake News Intelligence\nv1.0",
                      font=FONTS["tiny"],
                      text_color=COLORS["text_muted"],
                      justify="center").pack(pady=8)
@@ -374,7 +373,6 @@ class FakeNewsApp(ctk.CTk):
             "history": lambda: self._pages["history"].refresh(),
             "sources": lambda: self._pages["sources"].refresh(),
             "timeline": lambda: self._pages["timeline"].refresh(),
-            "dsa": lambda: self._pages["dsa"].refresh(),
         }
         if page_key in refresh_map:
             refresh_map[page_key]()
